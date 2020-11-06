@@ -6,6 +6,16 @@
 #include <time.h>
 #define  sud_size 82
 
+#define DET_STATE(POS , CAND) ( (POS > 0)<<1 | (!CAND) )
+
+#define FULL_CELL 511
+
+#define JMP_FOUND_IN_BACKTRACK  0
+#define JMP_CONTINUE_BACK       1
+
+#define JMP_PUSH_FORWARD        2
+#define JMP_GO_BACK             3
+
 char sudoku_mask[sud_size] = "000111222000111222000111222333444555333444555333444555666777888666777888666777888";
 
 int get_sup_possi(int num, int taken) {
@@ -17,16 +27,17 @@ int get_sup_possi(int num, int taken) {
     return 0;
 }
 
+
 int32_t commit_sudokuMk2(char* sudoku_map) {
     int row_pos[9] = {0};
     int col_pos[9] = {0};
     int sqe_pos[9] = {0};
     int i=0; // iterator
     // we need this to fill the sets
+    int poss = 1;
     for (i = 0; i < sud_size-1; i++) {
         if (sudoku_map[i] != '0') {
-            int poss = 1;
-            poss = poss << (sudoku_map[i] - '1');
+            poss = 1 << (sudoku_map[i] - '1');
             row_pos[i / 9] = row_pos[i / 9] | poss;
             col_pos[i % 9] = col_pos[i % 9] | poss;
             sqe_pos[sudoku_mask[i] - '0'] = sqe_pos[sudoku_mask[i] - '0'] | poss;
@@ -47,17 +58,11 @@ int32_t commit_sudokuMk2(char* sudoku_map) {
             pos++;
         } else {
             iterations++;
-            if (pos < 0) {
-                cand_mask = ((row_pos[(abs(pos) - 1) / 9]) | (col_pos[(abs(pos) - 1) % 9]) | (sqe_pos[sudoku_mask[(abs(pos) - 1)] - '0']));
-                cand = get_sup_possi(cand_mask, (int)(sudoku[(abs(pos) - 1)] - '0'));
+            cand_mask = ((row_pos[(abs(pos) - 1) / 9]) | (col_pos[(abs(pos) - 1) % 9]) | (sqe_pos[sudoku_mask[(abs(pos) - 1)] - '0']));
+            cand = get_sup_possi(cand_mask, (int)(sudoku[(abs(pos) - 1)] - '0'));
 
-                if (cand) {
-                    // if there is a possible candidate,
-                    // 1) remove old one,
-                    // 2) edit the masks
-                    // 3) put the new one in and
-                    // 4) edit the mask for it
-                    // 5) reverse counter & iterate
+            switch (DET_STATE(pos,cand)) {
+                case JMP_FOUND_IN_BACKTRACK:
                     old = sudoku[(abs(pos) - 1)] - '0';
                     old_mask = (1 << (old - 1));
                     row_pos[(abs(pos) - 1) / 9] = row_pos[(abs(pos) - 1) / 9] & (~old_mask);
@@ -71,12 +76,8 @@ int32_t commit_sudokuMk2(char* sudoku_map) {
                     sudoku[(abs(pos) - 1)] = '0' + cand;
                     pos = -pos;
                     pos++;
-                } else {
-
-                    // if there isn't a new candidate
-                    // 1) edit the masks
-                    // 2) remove current and put a zero there
-                    // 3) iterate
+                    break;
+                case JMP_CONTINUE_BACK:
                     cand = sudoku[(abs(pos) - 1)] - '0';
                     cand_mask = (1 << (cand - 1));
                     row_pos[(abs(pos) - 1) / 9] = row_pos[(abs(pos) - 1) / 9] & (~cand_mask);
@@ -84,37 +85,25 @@ int32_t commit_sudokuMk2(char* sudoku_map) {
                     sqe_pos[sudoku_mask[(abs(pos) - 1)] - '0'] = sqe_pos[sudoku_mask[(abs(pos) - 1)] - '0'] & (~cand_mask);
                     sudoku[(abs(pos) - 1)] = '0';
                     pos++;
-                }
-            } else {
-                cand_mask = ((row_pos[(abs(pos) - 1) / 9]) | (col_pos[(abs(pos) - 1) % 9]) | (sqe_pos[sudoku_mask[(abs(pos) - 1)] - '0']));
-                cand = get_sup_possi(cand_mask, 0);
-
-                if (cand) {
-                    // put new number in the cell and walk forward in sudoku array
-                    // edit sudoku
-                    // 4) edit the mask for it
-                    // 5) reverse counter masks to accomodate new num
+                    break;
+                case JMP_PUSH_FORWARD:
                     cand_mask = (1 << (cand - 1));
                     row_pos[(pos - 1) / 9] = row_pos[(pos - 1) / 9] | cand_mask;
                     col_pos[(pos - 1) % 9] = col_pos[(pos - 1) % 9] | cand_mask;
                     sqe_pos[sudoku_mask[(pos - 1)] - '0'] = sqe_pos[sudoku_mask[(pos - 1)] - '0'] | cand_mask;
                     sudoku[(pos - 1)] = '0' + cand;
                     pos++;
-                } else {
-                    // walk backwards in sudoku array
+                    break;
+                case JMP_GO_BACK:
                     pos = -pos;
                     pos++;
-                }
+                    break;
             }
         }
     }
     for (i = 0; i < 9; i++) {
-        if ((row_pos[i] & sqe_pos[i] & col_pos[i]) != 511) {
-            return 1;
-        }
+        if ((row_pos[i] & sqe_pos[i] & col_pos[i]) != FULL_CELL) return 1; 
     }
-    //free(sudoku);
-    //printf("\n\nsolved in :%d\n", iterations);
     return 0;
 }
 
