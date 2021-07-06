@@ -118,6 +118,7 @@ int32_t commit_sudoku(char* sudoku_map)
         if ((row_pos[i] & sqe_pos[i] & col_pos[i]) != FULL_CELL)
             return 1;
     }
+    printf("%s\n",sudoku);
     return 0;
 }
 
