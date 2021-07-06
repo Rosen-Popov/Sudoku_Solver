@@ -99,19 +99,36 @@ proc newMasks(sud:Sudoku):Masks=
 #    echo sud.cnt[(i*maxSud)..<((i+1)*maxSud)]
   return res
 
-proc GetSupPossi(mask:int,taken:int):int=
-  for i in (taken+1)..maxSud:
+proc GetSupPossi(mask:int,taken:int,size:int):int=
+  for i in (taken+1)..size:
     if not mask.testBit(i-1):
       return i
   return 0
 
+# not exactly working ? 
+proc RandomPossi(mask:int,taken:int,size:int):int=
+  var counter:int = countSetBits(not mask)
+  if counter == 0:
+    return 0
+  counter = rand(counter-1)
+  # TODO make it so its not a compile time parameter
+  for i in 1..size:
+    if not mask.testBit(i-1) and counter == 0:
+      return i
+    dec counter
+  return 0
 
 proc FromString(sud:string):Sudoku =
   return Sudoku(cnt:sud.map(proc(a:char):int= Translate(a)))
 
-
-proc SolveSudoku(input: Sudoku):Sudoku=
+#
+#
+# Solves sudoku by brute force
+#
+#
+proc SolveSudoku(input: Sudoku,RandomSolve:bool = false):Sudoku=
   var Repr:Masks = input.newMasks
+  var SudokuKind:int = pow(input.cnt.len().float , 0.5 ).int
   var Done = input
   var sud:Sudoku = deepCopy(input)
   var iterations:uint64
@@ -123,17 +140,20 @@ proc SolveSudoku(input: Sudoku):Sudoku=
   var STATE:int = 0
   var old:int
   var old_mask:int
+  var GetPossi: (proc (mask:int,taken:int,size:int):int) = GetSupPossi
+
+  if RandomSolve:
+    GetPossi = RandomPossi
 
   while pos < mx:
 
     tmp_pos = abs(pos) - 1
     if Done.cnt[tmp_pos] == sud.cnt[tmp_pos] and Done.cnt[tmp_pos] != 0:
       inc pos
-      continue
     else:
       inc iterations
       CandMask = (Repr.row[tmp_pos div 9]).bitor(Repr.collum[tmp_pos mod 9],Repr.square[square_map[tmp_pos]])
-      Cand = GetSupPossi(CandMask, sud.cnt[tmp_pos])
+      Cand = GetPossi(CandMask, sud.cnt[tmp_pos],SudokuKind)
       STATE = ((pos>0).int shl 1).bitor((Cand == 0).int)
       case STATE:
         of FOUND_IN_BACKTRACK:
@@ -171,6 +191,16 @@ proc SolveSudoku(input: Sudoku):Sudoku=
         else:
           assert(true,"time to commit self die i guess")
   return sud
+
+#
+#
+# Solves sudoku the naiive way, i use it check will make a hybrid solver later, 
+# that uses that approach to nail sure solutions and brute forces the rest
+#
+#
+
+proc NaiiveSolver(sud:Sudoku):Sudoku = 
+  discard
 
 proc LoadFromIndex(sud:var Sudoku,ind:int,sq_data:seq[int],sq_side:int)=
   var counter:int=0
