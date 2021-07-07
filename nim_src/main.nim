@@ -50,7 +50,7 @@ proc GenCellMatr(cell_size :int):seq[int]=
       result = result & tmp
   return result
 
-const square_map = GenCellMatr(Cell)
+const square_map_global:Table[int,seq[int]] = [(9, GenCellMatr(3)),(16,GenCellMatr(3))].toTable
 
 type
   Masks = object
@@ -61,6 +61,10 @@ type
 type
   Sudoku = object
     cnt:seq[int]
+
+proc GetKind(this:Sudoku):int=
+  return pow(this.cnt.len().float , 0.5 ).int
+
 
 proc CheckMasks(sud:Sudoku,this:Masks):bool=
   var set_in_sud =  sud.cnt.filter(proc (x:int):bool= x > 0).len()
@@ -76,6 +80,7 @@ proc CheckMasks(sud:Sudoku,this:Masks):bool=
   return true
 
 proc newMasks(sud:Sudoku):Masks=
+  var square_map = square_map_global[sud.GetKind()]
   var res:Masks = Masks(square:repeat(0,maxSud),
                         collum:repeat(0,maxSud),
                         row:repeat(0,maxSud))
@@ -122,13 +127,13 @@ proc FromString(sud:string):Sudoku =
   return Sudoku(cnt:sud.map(proc(a:char):int= Translate(a)))
 
 #
-#
 # Solves sudoku by brute force
 #
 #
 proc SolveSudoku(input: Sudoku,RandomSolve:bool = false):Sudoku=
   var Repr:Masks = input.newMasks
-  var SudokuKind:int = pow(input.cnt.len().float , 0.5 ).int
+  var SudokuKind:int = input.GetKind()
+  var square_map = square_map_global[SudokuKind]
   var Done = input
   var sud:Sudoku = deepCopy(input)
   var iterations:uint64
@@ -199,8 +204,34 @@ proc SolveSudoku(input: Sudoku,RandomSolve:bool = false):Sudoku=
 #
 #
 
-proc NaiiveSolver(sud:Sudoku):Sudoku = 
-  discard
+proc NaiiveSolver(input:Sudoku):(bool,Sudoku ){.discardable.}=  
+  var Repr:Masks = input.newMasks
+  var SudokuKind:int = input.GetKind()
+  var square_map = square_map_global[SudokuKind]
+  var Done = input
+  var sud:Sudoku = deepCopy(input)
+  var CandMask:int
+  var Cand:int
+  var IsSolved:bool = false
+
+  while IsSolved == false:
+    IsSolved = true
+    for pos in 0..sud.cnt.high():
+      if Done.cnt[pos] == sud.cnt[pos] and Done.cnt[pos] != 0:
+        continue
+      else:
+        CandMask = (Repr.row[pos div 9]).bitor(Repr.collum[pos mod 9],Repr.square[square_map[pos]])
+        if countSetBits(CandMask) == SudokuKind - 1:
+          Is_Solved = false
+          Cand = GetSupPossi(CandMask,0,SudokuKind)
+          CandMask = (not CandMask)
+          Repr.row[pos  div 9] = Repr.row[pos div 9].bitor(CandMask)
+          Repr.collum[pos mod 9] = Repr.collum[pos mod 9].bitor(CandMask)
+          Repr.square[square_map[pos]] = Repr.square[square_map[pos]].bitor(CandMask)
+          sud.cnt[pos] = Cand;
+  if sud.cnt.contains(0):
+    return (false,sud)
+  return (true,sud)
 
 proc LoadFromIndex(sud:var Sudoku,ind:int,sq_data:seq[int],sq_side:int)=
   var counter:int=0
@@ -209,20 +240,41 @@ proc LoadFromIndex(sud:var Sudoku,ind:int,sq_data:seq[int],sq_side:int)=
       sud.cnt[i + j*sq_side*sq_side] = sq_data[counter]
       inc counter
 
-# eithder 9 or 16
+proc SolvableWithoutIndex(input:var Sudoku,ind:int):bool=
+  var store:int = input.cnt[ind]
+  input.cnt[ind] = 0
+  var solvable:bool
+  var res:Sudoku
+  (solvable,res) = NaiiveSolver(input)
+  if not solvable :
+    input.cnt[ind] = store
+  return solvable 
+
+
 proc GenerateSudoku(square_size:int = 9):Sudoku=
   randomize()
   var res:Sudoku
   var full_size:int = square_size * square_size
   var sq:int = pow(square_size.float ,0.5).int
   var diagonal_suare_seed:seq[int] = toSeq(1..square_size)
+  var random_order_remove:seq[int] = toSeq(0..<81)
+  var removed:int = 0
+  diagonal_suare_seed.shuffle()
+  random_order_remove.shuffle()
   res.cnt.setLen(full_size)
-
+  # fill sudoku's diagonal
   for i in 0..<sq:
     diagonal_suare_seed.shuffle()
     var ind:int= i * (sq ^ 3).int + i*sq
     res.LoadFromIndex(ind,diagonal_suare_seed,sq)
+  # solve the sudoku so it fills the rest <100,000 iterations for 9x9, so nothing basically nothing
   res = SolveSudoku(res)
+
+  for i in items(random_order_remove):
+    echo i , " ", res.SolvableWithoutIndex(i).int
+    removed = removed + res.SolvableWithoutIndex(i).int
+
+  echo "removed ",removed
 
   for i in 0..<maxSud:
     echo res.cnt[(i*maxSud)..<((i+1)*maxSud)]
@@ -230,10 +282,15 @@ proc GenerateSudoku(square_size:int = 9):Sudoku=
   return res
 
 if isMainModule:
-  #var test ="812053649943682175675491283154237896369845721287169534521974368438526917796318452"
+  #var test ="812003649943680175675491283154207896369840701287069034521074368438506917796018052"
   #var test = "800000000003600000070090200050007000000045700000100030001000068008500010090000400"
   #echo SolveSudoku(FromString(test))
+  #var res:Sudoku
+  #var tmp:bool
+  #(tmp , res) = NaiiveSolver(FromString(test))
 
+  #for i in 0..<maxSud:
+  #  echo res.cnt[(i*maxSud)..<((i+1)*maxSud)]
 
   discard GenerateSudoku()
 
